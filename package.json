@@ -11,7 +11,7 @@
     "prettier": "^3.5.3",
     "turbo": "^2.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.1.1"
+    "vitest": "^3.1.2"
   },
   "packageManager": "pnpm@10.7.0",
   "scripts": {
@@ -27,7 +27,7 @@
     "bumpDeps:root": "ncu -u",
     "bump": "npm-run-all --parallel bumpDeps:* && pnpm i",
     "typecheck": "turbo tsc",
-    "test": "vitest",
+    "test": "turbo test",
     "test:e2e": "pnpm exec playwright test"
   },
   "dependencies": {

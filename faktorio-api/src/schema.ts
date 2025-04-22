@@ -63,9 +63,21 @@ export const invoicesTb = sqliteTable(
       mode: 'boolean'
     }),
     supply_code: text('supply_code'),
+    /**
+     * total amount of the invoice excluding VAT in the currency of the invoice
+     */
     subtotal: real('subtotal'),
+    /**
+     * total amount of the invoice including VAT in the currency of the invoice
+     */
     total: real('total').notNull(),
+    /**
+     * total amount of the invoice excluding VAT in CZK
+     */
     native_subtotal: real('native_subtotal').notNull(),
+    /**
+     * total amount of the invoice including VAT in CZK
+     */
     native_total: real('native_total'),
     remaining_amount: real('remaining_amount'),
     remaining_native_amount: real('remaining_native_amount'),
@@ -254,7 +266,7 @@ export const passwordResetTokenT = sqliteTable('password_reset_tokens', {
   usedAt: integer('used_at', { mode: 'timestamp' })
 })
 
-export const receivedInvoicesTb = sqliteTable(
+export const receivedInvoiceTb = sqliteTable(
   'received_invoice',
   {
     id: text('id')
@@ -302,10 +314,9 @@ export const receivedInvoicesTb = sqliteTable(
     // VAT breakdown - required for Czech VAT reporting
     vat_base_21: real('vat_base_21'), // Základ daně 21%
     vat_21: real('vat_21'), // VAT amount at 21%
-    vat_base_15: real('vat_base_15'), // Základ daně 15%
-    vat_15: real('vat_15'), // VAT amount at 15%
-    vat_base_10: real('vat_base_10'), // Základ daně 10%
-    vat_10: real('vat_10'), // VAT amount at 10%
+    vat_base_12: real('vat_base_12'), // snížená sazba daně 12%
+    vat_12: real('vat_12'), // VAT amount at 12%
+
     vat_base_0: real('vat_base_0'), // Non-taxable amount (0%)
 
     // Special VAT handling

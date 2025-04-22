@@ -10,16 +10,18 @@
     "generate": "drizzle-kit generate",
     "dup": "drizzle-kit up",
     "kill": "kill -9 $(lsof -t -i:9189)",
-    "test": "vitest",
+    "test": "vitest run",
+    "w": "vitest",
+    "tsc": "tsc --noEmit",
     "check-env": "tsx scripts/check-env.ts"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250419.0",
+    "@cloudflare/workers-types": "^4.20250422.0",
     "@types/debug": "^4.1.12",
     "drizzle-kit": "^0.31.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3",
-    "vitest": "^3.1.1",
+    "vitest": "^3.1.2",
     "wrangler": "^4.12.0"
   },
   "dependencies": {
@@ -33,10 +35,12 @@
     "@trpc/react-query": "^11.1.0",
     "@trpc/server": "^11.1.0",
     "@tsndr/cloudflare-worker-jwt": "^3.1.4",
+    "currency-codes": "^2.2.0",
     "debug": "^4.4.0",
     "dotenv": "^16.5.0",
     "drizzle-orm": "^0.42.0",
     "drizzle-zod": "^0.7.1",
+    "faktorio-shared": "workspace:*",
     "node-mailjet": "^6.0.8",
     "zod": "^3.24.3"
   }
