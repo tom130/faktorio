@@ -199,12 +199,7 @@ export const EnglishInvoicePDF = ({
     (acc, item) => acc + (item.quantity ?? 0) * (item.unit_price ?? 0),
     0
   )
-  console.log('taxPaidByRate:', {
-    accountNumber: invoiceData.iban,
-    amount: invoiceTotal + taxTotal,
-    currency: invoiceData.currency,
-    variableSymbol: invoiceData.number.replace('-', '')
-  })
+
   const qrCodeBase64 = useQRCodeBase64(
     generateQrPaymentString({
       accountNumber: invoiceData.iban?.replace(/\s/g, '') ?? '',
@@ -214,6 +209,9 @@ export const EnglishInvoicePDF = ({
       message: 'Faktura ' + invoiceData.number
     })
   )
+  if (!qrCodeBase64) {
+    return null
+  }
   return (
     <Document key={new Date().toISOString()}>
       <Page size="A4" style={styles.page}>
@@ -460,6 +458,11 @@ export const EnglishInvoicePDF = ({
             const unitPrice = item.unit_price ?? 0
             const quantity = item.quantity ?? 0
             const vatRate = item.vat_rate ?? 0
+            const hourPluralized = quantity === 1 ? 'hour' : 'hours'
+            const unit =
+              item.unit === 'hodina' || item.unit === 'hodin'
+                ? hourPluralized
+                : item.unit
             return (
               <Flex
                 key={index}
@@ -490,7 +493,7 @@ export const EnglishInvoicePDF = ({
                       fontSize: 9
                     }}
                   >
-                    {item.unit}
+                    {unit}
                   </ItemDescText>
                   <ItemDescText>{item.description}</ItemDescText>
                 </Flex>
