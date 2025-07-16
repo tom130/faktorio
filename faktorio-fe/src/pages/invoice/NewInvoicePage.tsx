@@ -8,20 +8,15 @@ import { Button, ButtonWithLoader } from '@/components/ui/button'
 import { getInvoiceCreateSchema } from 'faktorio-api/src/routers/zodSchemas'
 import { djs } from 'faktorio-shared/src/djs'
 import { useZodFormState } from '@/lib/useZodFormState'
-import { z } from 'zod'
-import { invoiceItemFormSchema } from '../../../../faktorio-api/src/zodDbSchemas'
+import { z } from 'zod/v4'
+import { invoiceItemFormSchema } from 'faktorio-api/src/zodDbSchemas'
 import { useEffect, useState } from 'react'
 import { Center } from '../../components/Center'
 import { useLocation } from 'wouter'
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger
-} from '@/components/ui/accordion'
 import { FormItem, FormLabel, FormControl } from '@/components/ui/form'
 import { Label } from '@/components/ui/label'
 import { BankDetailsAccordion } from './BankDetailsAccordion'
+import { createDateFieldConfig } from './dateFieldConfig'
 
 const defaultInvoiceItem = {
   description: '',
@@ -45,7 +40,8 @@ export const NewInvoice = () => {
       client_contact_id: true
     })
     .extend({
-      client_contact_id: z.string().optional()
+      client_contact_id: z.string().optional(),
+      language: z.string().default('cs')
     })
   const [location, navigate] = useLocation()
   const createInvoice = trpcClient.invoices.create.useMutation()
@@ -55,7 +51,8 @@ export const NewInvoice = () => {
       due_in_days: 14,
       bank_account: invoicingDetails?.bank_account || '',
       iban: invoicingDetails?.iban || '',
-      swift_bic: invoicingDetails?.swift_bic || ''
+      swift_bic: invoicingDetails?.swift_bic || '',
+      language: 'cs'
     })
   )
 
@@ -81,6 +78,22 @@ export const NewInvoice = () => {
     }
     fetchRate()
   }, [formValues.currency])
+
+  useEffect(() => {
+    if (formValues.client_contact_id && contactsQuery.data) {
+      const selectedContact = contactsQuery.data.find(
+        (contact) => contact.id === formValues.client_contact_id
+      )
+
+      if (selectedContact) {
+        setFormValues((prev) => ({
+          ...prev,
+          language: selectedContact.language,
+          currency: selectedContact.currency
+        }))
+      }
+    }
+  }, [formValues.client_contact_id, contactsQuery.data])
 
   const [invoiceItems, setInvoiceItems] = useState<
     z.infer<typeof invoiceItemFormSchema>[]
@@ -150,27 +163,23 @@ export const NewInvoice = () => {
           currency: {
             label: 'Měna'
           },
-          issued_on: {
-            label: 'Datum vystavení faktury',
-            fieldType: 'date'
-          },
+          issued_on: createDateFieldConfig('Datum vystavení faktury'),
           number: {
             label: 'Číslo faktury'
           },
           payment_method: {
             label: 'Způsob platby'
           },
-          taxable_fulfillment_due: {
-            label: 'Datum zdanitelného plnění',
-            fieldType: 'date'
-          },
+          taxable_fulfillment_due: createDateFieldConfig(
+            'Datum zdanitelného plnění'
+          ),
           footer_note: {
             label: 'Poznámka'
           },
           client_contact_id: {
             label: 'Odběratel',
             fieldType: ({ label, isRequired, field, fieldConfigItem }) => (
-              <FormItem className="flex flex-col flew-grow col-span-2">
+              <FormItem className="flex flex-col flew-grow">
                 <FormLabel>
                   {label}
                   {isRequired && (

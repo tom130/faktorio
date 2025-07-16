@@ -48,7 +48,7 @@ export const invoicesTb = sqliteTable(
     issued_on: text('issued_on')
       .notNull()
       .$defaultFn(() => djs().format('YYYY-MM-DD')), // Dates as text YYYY-MM-DD
-    taxable_fulfillment_due: text('taxable_fulfillment_due').notNull(), // Dates as text YYYY-MM-DD
+    taxable_fulfillment_due: text('taxable_fulfillment_due').notNull(), // DUZP Dates as text YYYY-MM-DD
     due_in_days: integer('due_in_days').notNull(), // in days how long before the invoice is due
     due_on: text('due_on').notNull(), // Dates as text YYYY-MM-DD
     sent_at: text('sent_at'), // Dates as text YYYY-MM-DD
@@ -111,7 +111,7 @@ export const invoicesTb = sqliteTable(
     created_at: text('created_at')
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`),
-    updated_at: text('updated_at'),
+    updated_at: text('updated_at').$onUpdate(() => sql`CURRENT_TIMESTAMP`),
     published_at: text('published_at'), // published invoices are visible on a public secret URL so that the client can view and download them as PDF
     client_contact_id: text('client_contact_id')
       .notNull()
@@ -123,7 +123,10 @@ export const invoicesTb = sqliteTable(
       userIndex: index('invoices_user_idx').on(invoices.user_id),
       clientContactIdIndex: index('invoices_client_contact_id_idx').on(
         invoices.client_contact_id
-      )
+      ),
+      taxableFulfillmentDueIndex: index(
+        'invoices_taxable_fulfillment_due_idx'
+      ).on(invoices.taxable_fulfillment_due)
     }
   }
 )
@@ -158,12 +161,12 @@ export const contactTb = sqliteTable(
     type: text('type'),
     default_invoice_due_in_days: integer('default_invoice_due_in_days'), // in days how long the invoice is due
     default_invoice_item_unit: text('default_invoice_item_unit'),
-    currency: text('currency'),
-    language: text('language'),
+    currency: text('currency').default('CZK').notNull(),
+    language: text('language').default('cs').notNull(),
     created_at: text('created_at')
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`),
-    updated_at: text('updated_at')
+    updated_at: text('updated_at').$onUpdate(() => sql`CURRENT_TIMESTAMP`)
   },
   (userInvoicingDetails) => {
     return {
@@ -226,7 +229,7 @@ export const invoiceItemsTb = sqliteTable(
     created_at: text('created_at')
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`),
-    updated_at: text('updated_at')
+    updated_at: text('updated_at').$onUpdate(() => sql`CURRENT_TIMESTAMP`)
   },
   (invoiceItems) => {
     return {
@@ -253,6 +256,8 @@ export const userT = sqliteTable('users', {
     .notNull()
     .default(sql`(strftime('%s', 'now'))`)
 })
+
+export type UserSelectType = typeof userT.$inferSelect
 
 export const passwordResetTokenT = sqliteTable('password_reset_tokens', {
   id: text('id')
@@ -329,7 +334,9 @@ export const receivedInvoiceTb = sqliteTable(
     vat_regime: text('vat_regime'), // Standard, non-VAT payer, special regime
 
     // Payment details
-    payment_method: text('payment_method'), // Bank transfer, cash, card, etc.
+    payment_method: text('payment_method').$type<
+      'bank' | 'cash' | 'card' | 'cod' | 'crypto' | 'other'
+    >(),
     bank_account: text('bank_account'),
     iban: text('iban'),
     swift_bic: text('swift_bic'),
@@ -347,6 +354,7 @@ export const receivedInvoiceTb = sqliteTable(
         accounting_code?: string
       }>
     >(),
+    line_items_summary: text('line_items_summary'),
 
     // Administrative fields
     status: text('status').notNull().default('received'), // received, verified, disputed, paid, etc.
@@ -358,7 +366,7 @@ export const receivedInvoiceTb = sqliteTable(
     created_at: text('created_at')
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`),
-    updated_at: text('updated_at'),
+    updated_at: text('updated_at').$onUpdate(() => sql`CURRENT_TIMESTAMP`),
     accounting_period: text('accounting_period') // Účetní období (YYYY-MM format)
   },
   (receivedInvoices) => {
@@ -366,6 +374,9 @@ export const receivedInvoiceTb = sqliteTable(
       userIndex: index('received_invoices_user_idx').on(
         receivedInvoices.user_id
       ),
+      taxableSupplyDateIndex: index(
+        'received_invoices_taxable_supply_date_idx'
+      ).on(receivedInvoices.taxable_supply_date),
       supplierContactIdIndex: index(
         'received_invoices_supplier_contact_id_idx'
       ).on(receivedInvoices.supplier_contact_id),
@@ -377,3 +388,46 @@ export const receivedInvoiceTb = sqliteTable(
     }
   }
 )
+
+export const pushSubscriptionTb = sqliteTable(
+  'push_subscription',
+  {
+    id: text('id')
+      .$defaultFn(() => createId())
+      .primaryKey()
+      .notNull(),
+    user_id: text('user_id')
+      .notNull()
+      .references(() => userT.id, { onDelete: 'cascade' }),
+    endpoint: text('endpoint').notNull(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    updated_at: text('updated_at').$onUpdate(() => sql`CURRENT_TIMESTAMP`)
+  },
+  (pushSubscriptions) => {
+    return {
+      userIndex: index('push_subscriptions_user_idx').on(
+        pushSubscriptions.user_id
+      ),
+      endpointUniqueIndex: unique().on(pushSubscriptions.endpoint)
+    }
+  }
+)
+
+export const systemStatsTb = sqliteTable('system_stats', {
+  id: text('id')
+    .$defaultFn(() => createId())
+    .primaryKey()
+    .notNull(),
+  user_count: integer('user_count').notNull(),
+  invoice_count: integer('invoice_count').notNull(),
+  calculated_at: text('calculated_at')
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+  created_at: text('created_at')
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`)
+})

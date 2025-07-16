@@ -1,12 +1,12 @@
 'use client'
 import { Form } from '@/components/ui/form'
 import React from 'react'
-import { DefaultValues, useForm } from 'react-hook-form'
-import { z } from 'zod'
+import { DefaultValues, SubmitHandler, useForm } from 'react-hook-form'
+import { z } from 'zod/v4'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { zodResolver } from '@/lib/zodResolver'
 
 import AutoFormObject from './fields/object'
 import { Dependency, FieldConfig } from './types'
@@ -66,7 +66,7 @@ function AutoForm<SchemaType extends ZodObjectOrWrapped>({
   function onSubmit(values: z.infer<typeof formSchema>) {
     const parsedValues = formSchema.safeParse(values)
     if (parsedValues.success) {
-      onSubmitProp?.(parsedValues.data)
+      onSubmitProp?.(parsedValues.data as z.infer<SchemaType>)
     }
   }
 
@@ -75,11 +75,13 @@ function AutoForm<SchemaType extends ZodObjectOrWrapped>({
   const valuesString = JSON.stringify(values)
 
   React.useEffect(() => {
-    onValuesChange?.(values)
+    onValuesChange?.(values as z.infer<SchemaType>)
 
     const parsedValues = formSchema.safeParse(values)
     if (parsedValues.success) {
-      onParsedValuesChange?.(parsedValues.data)
+      onParsedValuesChange?.(parsedValues.data as z.infer<SchemaType>)
+    } else {
+      // console.log('parsedValues', parsedValues)
     }
   }, [valuesString])
 
@@ -88,15 +90,19 @@ function AutoForm<SchemaType extends ZodObjectOrWrapped>({
       <Form {...form}>
         <form
           onSubmit={(e) => {
-            form.handleSubmit(onSubmit)(e)
+            form.handleSubmit(
+              onSubmit as SubmitHandler<z.infer<typeof objectFormSchema>>
+            )(e)
           }}
           className={cn('space-y-5', className)}
         >
-          <AutoFormObject
+          <AutoFormObject<typeof objectFormSchema>
             schema={objectFormSchema}
             form={form}
             containerClassName={containerClassName}
-            dependencies={dependencies}
+            dependencies={
+              dependencies as Dependency<z.infer<typeof objectFormSchema>>[]
+            }
             fieldConfig={fieldConfig}
           />
 

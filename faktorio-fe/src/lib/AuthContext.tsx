@@ -10,15 +10,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { httpBatchLink, Operation } from '@trpc/client'
 import { SuperJSON } from 'superjson'
 import { trpcLinks } from './errorToastLink'
-import { userT } from '../../../faktorio-api/src/schema'
+import { userT } from 'faktorio-db/schema'
 import { useLocation } from 'wouter'
 
-import { trpcContext } from '../../../faktorio-api/src/trpcContext'
-import { appRouter } from '../../../faktorio-api/src/trpcRouter'
-import { AnyRouter, inferRouterContext } from '@trpc/server'
-import { Database } from 'sql.js'
-import * as schema from '../../../faktorio-api/src/schema'
+import { trpcContext, type TrpcContext } from 'faktorio-api/src/trpcContext'
+import { AppRouter, appRouter } from 'faktorio-api/src/trpcRouter'
+import { inferRouterContext } from '@trpc/server'
+import * as schema from 'faktorio-db/schema'
 import { LibSQLDatabase } from 'drizzle-orm/libsql'
+import { SQLJsDatabase } from 'drizzle-orm/sql-js'
 import { useDb } from './local-db/DbContext'
 import { createLocalCallerLink } from './createLocalCallerLink'
 const VITE_API_URL = import.meta.env.VITE_API_URL
@@ -127,6 +127,7 @@ const AuthProviderInner: React.FC<{ children: React.ReactNode }> = ({
 
   const logout = useCallback(
     (path?: string) => {
+      logoutMutation.mutate()
       setUser(null)
       setToken(null)
       localStorage.removeItem('auth_token')
@@ -134,7 +135,6 @@ const AuthProviderInner: React.FC<{ children: React.ReactNode }> = ({
 
       utils.invalidate()
 
-      logoutMutation.mutate()
       path && navigate('/')
     },
     [logoutMutation]
@@ -154,9 +154,12 @@ const AuthProviderInner: React.FC<{ children: React.ReactNode }> = ({
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-export const createCaller = trpcContext.createCallerFactory(appRouter)
+export const createCaller: (
+  ctx: TrpcContext
+) => ReturnType<typeof appRouter.createCaller> =
+  trpcContext.createCallerFactory(appRouter)
 
-export interface LocalCallerLinkOptions<TRouter extends AnyRouter> {
+export interface LocalCallerLinkOptions<TRouter extends AppRouter> {
   router: TRouter
   onMutation: (mutation: Operation) => void
   createContext: () =>
@@ -164,15 +167,76 @@ export interface LocalCallerLinkOptions<TRouter extends AnyRouter> {
     | inferRouterContext<TRouter>
 }
 
+function parseEnvVars(): {
+  TURSO_DATABASE_URL: string
+  TURSO_AUTH_TOKEN: string
+  JWT_SECRET: string
+  GEMINI_API_KEY: string
+  VAPID_PRIVATE_KEY: string
+  VAPID_PUBLIC_KEY: string
+  VAPID_SUBJECT: string
+  MAILJET_API_KEY: string
+  MAILJET_API_SECRET: string
+} {
+  const envVarsString = localStorage.getItem('local_env_vars')
+  const envVars: Record<string, string> = {}
+
+  if (envVarsString) {
+    const lines = envVarsString.split('\n')
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+        const [key, ...valueParts] = trimmed.split('=')
+        const value = valueParts.join('=')
+        if (key.trim()) {
+          envVars[key.trim()] = value.trim()
+        }
+      }
+    }
+  }
+
+  // Provide defaults for required environment variables
+  const defaults = {
+    TURSO_DATABASE_URL: '',
+    TURSO_AUTH_TOKEN: '',
+    JWT_SECRET: 'local_secret_key',
+    GEMINI_API_KEY: '',
+    VAPID_PRIVATE_KEY: '',
+    VAPID_PUBLIC_KEY: '',
+    VAPID_SUBJECT: 'mailto:admin@example.com',
+    MAILJET_API_KEY: '',
+    MAILJET_API_SECRET: ''
+  }
+
+  return {
+    TURSO_DATABASE_URL:
+      envVars.TURSO_DATABASE_URL || defaults.TURSO_DATABASE_URL,
+    TURSO_AUTH_TOKEN: envVars.TURSO_AUTH_TOKEN || defaults.TURSO_AUTH_TOKEN,
+    JWT_SECRET: envVars.JWT_SECRET || defaults.JWT_SECRET,
+    GEMINI_API_KEY: envVars.GEMINI_API_KEY || defaults.GEMINI_API_KEY,
+    VAPID_PRIVATE_KEY: envVars.VAPID_PRIVATE_KEY || defaults.VAPID_PRIVATE_KEY,
+    VAPID_PUBLIC_KEY: envVars.VAPID_PUBLIC_KEY || defaults.VAPID_PUBLIC_KEY,
+    VAPID_SUBJECT: envVars.VAPID_SUBJECT || defaults.VAPID_SUBJECT,
+    MAILJET_API_KEY: envVars.MAILJET_API_KEY || defaults.MAILJET_API_KEY,
+    MAILJET_API_SECRET:
+      envVars.MAILJET_API_SECRET || defaults.MAILJET_API_SECRET
+  }
+}
+
+export async function authHeaders() {
+  const token = localStorage.getItem('auth_token')
+  return token
+    ? {
+        authorization: `Bearer ${token}`
+      }
+    : {}
+}
+
 export const AuthProvider: React.FC<{
   children: React.ReactNode
   localRun?: {
-    user: {
-      id: string
-      email: string
-      fullName: string
-    }
-    db: LibSQLDatabase<typeof schema>
+    user: typeof userT.$inferSelect
+    db: SQLJsDatabase<typeof schema>
   }
 }> = ({ children, localRun }) => {
   const [queryClient] = useState(() => new QueryClient())
@@ -187,16 +251,18 @@ export const AuthProvider: React.FC<{
               saveDatabase()
             },
             router: appRouter,
-            // @ts-expect-error
+
             createContext: () => {
+              const env = parseEnvVars()
               return {
-                env: {},
-                req: {},
+                env,
+                req: {} as Request,
                 generateToken: () => Promise.resolve(''),
-                sessionId: 'local_session',
-                userId: localRun.user.id,
+                sendEmail: () => Promise.resolve(),
                 user: localRun.user,
-                db: localRun.db
+                db: localRun.db as any as LibSQLDatabase<typeof schema>, // gotta do this conversion, because drizzle types don't work when we define db as union of LibSQL and SQLJs
+                googleGenAIFileManager: {} as any,
+                googleGenAI: {} as any
               }
             }
           })
@@ -209,14 +275,7 @@ export const AuthProvider: React.FC<{
           httpBatchLink({
             transformer: SuperJSON,
             url: VITE_API_URL,
-            async headers() {
-              const token = localStorage.getItem('auth_token')
-              return token
-                ? {
-                    authorization: `Bearer ${token}`
-                  }
-                : {}
-            }
+            headers: authHeaders
           })
         ]
       })

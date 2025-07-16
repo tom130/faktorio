@@ -9,25 +9,22 @@ import { getOpfsRoot, initSqlDb, saveDatabaseToOPFS } from './initSql'
 import type { Database } from 'sql.js'
 import { createId } from '@paralleldrive/cuid2'
 import { drizzle } from 'drizzle-orm/sql-js'
-import * as schema from 'faktorio-api/src/schema'
+import * as schema from 'faktorio-db/schema.ts'
 import { SQLJsDatabase } from 'drizzle-orm/sql-js'
-
-interface LocalUser {
-  id: string
-  email: string
-  fullName: string
-}
+import { UserSelectType } from 'faktorio-db/schema'
+import { userSelectSchema } from 'faktorio-api/src/zodDbSchemas'
+import z from 'zod/v4'
 
 interface DbContextType {
   activeDbName: string | null
   activeDb: Database | null
   drizzleDb: SQLJsDatabase<typeof schema> | null
-  localUser: LocalUser | null
+  localUser: UserSelectType | null
   isLoading: boolean
   error: string | null
   setActiveDatabase: (dbName: string) => Promise<boolean>
   clearActiveDatabase: () => void
-  setLocalUser: (user: Omit<LocalUser, 'id'>) => void
+  setLocalUser: (user: UserSelectType) => void
   clearLocalUser: () => void
   saveDatabase: () => void
 }
@@ -38,6 +35,11 @@ interface DbProviderProps {
   children: ReactNode
 }
 
+const userLocalStorageSchema = userSelectSchema.extend({
+  createdAt: z.string(),
+  updatedAt: z.string()
+})
+
 const LOCAL_STORAGE_ACTIVE_DB_KEY = 'faktorio_active_db'
 const LOCAL_STORAGE_USER_KEY = 'faktorio_local_user'
 
@@ -47,7 +49,7 @@ export function DbProvider({ children }: DbProviderProps) {
   const [drizzleDb, setDrizzleDb] = useState<SQLJsDatabase<
     typeof schema
   > | null>(null)
-  const [localUser, setLocalUserState] = useState<LocalUser | null>(null)
+  const [localUser, setLocalUserState] = useState<UserSelectType | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -55,10 +57,21 @@ export function DbProvider({ children }: DbProviderProps) {
   useEffect(() => {
     // Load local user info
     const storedUserJson = localStorage.getItem(LOCAL_STORAGE_USER_KEY)
+    console.log('storedUserJson', storedUserJson)
     if (storedUserJson) {
       try {
         const user = JSON.parse(storedUserJson)
-        setLocalUserState(user)
+        const parsedUser = userLocalStorageSchema.safeParse(user)
+        if (parsedUser.success) {
+          setLocalUserState({
+            ...parsedUser.data,
+            createdAt: new Date(parsedUser.data.createdAt),
+            updatedAt: new Date(parsedUser.data.updatedAt)
+          })
+        } else {
+          console.error('Failed to parse local user data:', parsedUser.error)
+          localStorage.removeItem(LOCAL_STORAGE_USER_KEY)
+        }
       } catch (err) {
         console.error('Failed to parse local user data:', err)
         localStorage.removeItem(LOCAL_STORAGE_USER_KEY)
@@ -126,8 +139,8 @@ export function DbProvider({ children }: DbProviderProps) {
   }
 
   // Set local user with generated ID
-  const setLocalUser = (userData: Omit<LocalUser, 'id'>) => {
-    const user: LocalUser = {
+  const setLocalUser = (userData: Omit<UserSelectType, 'id'>) => {
+    const user: UserSelectType = {
       id: createId(), // Generate a unique ID using cuid2
       ...userData
     }

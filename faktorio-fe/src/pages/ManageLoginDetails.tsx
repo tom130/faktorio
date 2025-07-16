@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from 'zod/v4'
 import { useState } from 'react'
 import { trpcClient } from '@/lib/trpcClient'
 import { FkButton } from '@/components/FkButton'
@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { zodResolver } from '@/lib/zodResolver'
 import { toast } from 'sonner'
 import { useAuth } from '@/lib/AuthContext'
 import {
@@ -170,27 +170,23 @@ export const ManageLoginDetails = () => {
     values: DeleteAccountPasswordFormValues
   ) => {
     setIsDeleteDialogOpen(false)
-    try {
-      await deleteAccountMutation.mutateAsync({
-        password: values.password
-      })
-    } catch (error) {
-      // Error is handled by the mutation's onError
-    }
+
+    await deleteAccountMutation.mutateAsync({
+      password: values.password
+    })
   }
 
   const onDeleteAccountConfirmSubmit = async (
     values: DeleteAccountConfirmFormValues
   ) => {
     setIsDeleteDialogOpen(false)
-    try {
-      await deleteAccountMutation.mutateAsync({
-        confirmText: values.confirmText
-      })
-    } catch (error) {
-      // Error is handled by the mutation's onError
-    }
+
+    await deleteAccountMutation.mutateAsync({
+      confirmText: values.confirmText
+    })
   }
+
+  console.log('d', deleteAccountMutation.isPending)
 
   return (
     <>
@@ -373,7 +369,6 @@ export const ManageLoginDetails = () => {
                       isLoading={deleteAccountMutation.isPending}
                       variant="destructive"
                       disabled={
-                        !deleteAccountPasswordForm.formState.isDirty ||
                         !deleteAccountPasswordForm.formState.isValid ||
                         Object.keys(deleteAccountPasswordForm.formState.errors)
                           .length > 0
@@ -416,12 +411,6 @@ export const ManageLoginDetails = () => {
                       type="submit"
                       isLoading={deleteAccountMutation.isPending}
                       variant="destructive"
-                      disabled={
-                        !deleteAccountConfirmForm.formState.isDirty ||
-                        !deleteAccountConfirmForm.formState.isValid ||
-                        Object.keys(deleteAccountConfirmForm.formState.errors)
-                          .length > 0
-                      }
                     >
                       Smazat účet
                     </FkButton>

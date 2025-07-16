@@ -115,12 +115,12 @@ function blogPlugin(): Plugin {
       )
       const BLOG_OUTPUT_DIR = path.join(process.cwd(), 'dist/public/blog')
 
-      // Create output directories
-      ;[BLOG_CONTENT_OUTPUT_DIR, BLOG_OUTPUT_DIR].forEach((dir) => {
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true })
-        }
-      })
+        // Create output directories
+        ;[BLOG_CONTENT_OUTPUT_DIR, BLOG_OUTPUT_DIR].forEach((dir) => {
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true })
+          }
+        })
 
       // Generate index.json
       fs.writeFileSync(
@@ -156,8 +156,25 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
-      workbox: {
+      srcDir: 'public',
+      filename: 'sw.js',
+      strategies: 'injectManifest',
+      injectManifest: {
         maximumFileSizeToCacheInBytes: 3000000
+      },
+      manifest: {
+        name: 'Faktorio',
+        short_name: 'Faktorio',
+        theme_color: '#ffffff',
+        background_color: '#ffffff',
+        display: 'standalone',
+        icons: [
+          {
+            src: '/faktura.png',
+            sizes: '192x192',
+            type: 'image/png'
+          }
+        ]
       }
     }),
     react(),
@@ -178,9 +195,35 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) {
+            // Split large database/SQL libraries
+            if (id.includes('sql.js') || id.includes('drizzle')) {
+              return `db_${gitHash}`
+            }
+
+            // Split React and React-related libraries
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
+              return `react_${gitHash}`
+            }
+
+            // Split PDF and document libraries
+            if (id.includes('pdf') || id.includes('jspdf') || id.includes('html2canvas')) {
+              return `pdf_${gitHash}`
+            }
+
+            // Everything else goes to general vendor
             return `vendor_${gitHash}`
           }
-        }
+        },
+        assetFileNames: (assetInfo) => {
+          const info = assetInfo.name?.split('.') || []
+          const ext = info.at(-1)
+          if (/png|jpe?g|svg|gif|tiff|bmp|ico/i.test(ext || '')) {
+            return `assets/images/[name]-[hash][extname]`
+          }
+          return `assets/[name]-[hash][extname]`
+        },
+        chunkFileNames: `assets/[name]-[hash].js`,
+        entryFileNames: `assets/[name]-[hash].js`
       }
     }
   },

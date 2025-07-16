@@ -5,18 +5,28 @@ import { appRouter } from './trpcRouter'
 
 import { createClient } from '@libsql/client'
 
-import * as schema from './schema'
+import * as schema from 'faktorio-db/schema'
 import colorize from '@pinojs/json-colorizer'
 import { TrpcContext } from './trpcContext'
 import { extractUserFromAuthHeader, generateToken } from './jwtUtils'
 import { GoogleAIFileManager } from '@google/generative-ai/server'
 import { GoogleGenAI } from '@google/genai'
 import { Env } from './envSchema'
+import { checkAndNotifyDueInvoices } from './lib/scheduledNotifications'
+import { calculateAndStoreSystemStats } from './lib/calculateSystemStats'
+import { sendEmail } from './sendEmail'
 
 // Add ExecutionContext type from Cloudflare Workers
 type ExecutionContext = {
   waitUntil(promise: Promise<any>): void
   passThroughOnException(): void
+}
+
+// Cloudflare Workers ScheduledController type
+type ScheduledController = {
+  scheduledTime: number
+  cron: string
+  noRetry(): void
 }
 
 const corsHeaders = {
@@ -57,8 +67,6 @@ export default {
       return handleOptions(request)
     }
 
-    console.log(request.body)
-
     const turso = createClient({
       url: env.TURSO_DATABASE_URL,
       authToken: env.TURSO_AUTH_TOKEN
@@ -84,6 +92,7 @@ export default {
         req: request,
         googleGenAIFileManager: fileManager,
         googleGenAI: genAI,
+        sendEmail: (email) => sendEmail(email, env),
         generateToken: (user) => generateToken(user, env.JWT_SECRET)
       }
     }
@@ -109,7 +118,7 @@ export default {
         console.error(errCtx.error)
         console.error(`${type} ${path} failed for:`)
 
-        const inputLength = JSON.stringify(input).length
+        const inputLength = input ? JSON.stringify(input).length : 0
         if (inputLength < 1000) {
           console.error(
             colorize(JSON.stringify({ errCtx: input, userId: ctx.user?.id }), {
@@ -136,5 +145,21 @@ export default {
       router: appRouter,
       createContext: createTrpcContext
     })
+  },
+
+  async scheduled(
+    controller: ScheduledController,
+    env: Env,
+    ctx: ExecutionContext
+  ): Promise<void> {
+    const turso = createClient({
+      url: env.TURSO_DATABASE_URL,
+      authToken: env.TURSO_AUTH_TOKEN
+    })
+
+    const db = drizzle(turso, { schema })
+
+    ctx.waitUntil(checkAndNotifyDueInvoices(db, env))
+    ctx.waitUntil(calculateAndStoreSystemStats(db))
   }
 }

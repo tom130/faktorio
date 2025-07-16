@@ -1,11 +1,10 @@
 import { createInsertSchema, createSelectSchema } from 'drizzle-zod'
-import * as schemas from './schema'
-import { z } from 'zod'
+import * as schemas from 'faktorio-db/schema'
+import { z } from 'zod/v4'
 
 export const insertSchemas = Object.entries(schemas).reduce(
   (acc, [key, value]) => {
-    // @ts-expect-error
-    acc[key] = createInsertSchema(value)
+    acc[key as keyof typeof schemas] = createInsertSchema(value)
     return acc
   },
   {} as Record<keyof typeof schemas, z.ZodSchema<any>>
@@ -33,3 +32,5 @@ export const invoiceItemFormSchema = invoiceItemInsertSchema.omit({
 
 export const invoiceSelectSchema = createSelectSchema(schemas.invoicesTb)
 export type SelectInvoiceType = z.infer<typeof invoiceSelectSchema>
+
+export const userSelectSchema = createSelectSchema(schemas.userT)

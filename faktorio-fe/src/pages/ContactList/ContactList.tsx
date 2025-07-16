@@ -1,4 +1,3 @@
-import AutoForm from '@/components/ui/auto-form'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -6,7 +5,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogDescription
 } from '@/components/ui/dialog'
 import {
@@ -19,11 +17,12 @@ import {
   Table
 } from '@/components/ui/table'
 import { trpcClient } from '@/lib/trpcClient'
+import { zodResolver } from '@/lib/zodResolver'
 
 import { Link, useParams, useLocation } from 'wouter'
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { SpinnerContainer } from '@/components/SpinnerContainer'
-import { z } from 'zod'
+import { z } from 'zod/v4'
 import Papa from 'papaparse'
 import { toast } from 'sonner'
 import { UploadIcon, HelpCircleIcon } from 'lucide-react'
@@ -33,8 +32,9 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from '@/components/ui/tooltip'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Spinner } from '@/components/ui/spinner'
+import { useForm, UseFormReturn } from 'react-hook-form'
+import { ContactForm } from './ContactForm'
 
 const AddressSchema = z.object({
   kodStatu: z.string(),
@@ -86,59 +86,6 @@ export const AresBusinessInformationSchema = z.object({
   // seznamRegistraci is omitted
 })
 
-const acFieldConfig = {
-  inputProps: {
-    autocomplete: 'off'
-  }
-}
-
-export const fieldConfigForContactForm = {
-  name: {
-    label: 'Jméno',
-    className: 'col-span-2',
-    ...acFieldConfig
-  },
-  city: {
-    label: 'Město',
-    ...acFieldConfig
-  },
-  street: {
-    label: 'Ulice',
-    ...acFieldConfig
-  },
-  street2: {
-    label: 'Ulice 2',
-    ...acFieldConfig
-  },
-  main_email: {
-    label: 'Email',
-    ...acFieldConfig
-  },
-  registration_no: {
-    label: 'IČO - po vyplnění se automaticky doplní další údaje z ARESU',
-    inputProps: {
-      placeholder: '8 čísel',
-      autocomplete: 'off'
-    }
-  },
-  vat_no: {
-    label: 'DIČ',
-    ...acFieldConfig
-  },
-  zip: {
-    label: 'Poštovní směrovací číslo',
-    ...acFieldConfig
-  },
-  phone_number: {
-    label: 'Telefon',
-    ...acFieldConfig
-  },
-  country: {
-    label: 'Země',
-    ...acFieldConfig
-  }
-}
-
 export const formatStreetAddress = (
   aresData: z.infer<typeof AresBusinessInformationSchema>
 ) => {
@@ -151,6 +98,23 @@ export const formatStreetAddress = (
 
   return `${streetName} ${houseNumber}${orientationNumber}`
 }
+
+// Define base schema for reuse
+const baseContactSchema = z.object({
+  registration_no: z.string().max(16).optional(),
+  vat_no: z.string().optional(),
+  name: z.string(),
+  street: z.string().optional(),
+  street2: z.string().optional(),
+  city: z.string().optional(),
+  zip: z.string().optional(),
+  country: z.string().optional(),
+  main_email: z.string().email().nullish(),
+  phone_number: z.string().nullish(),
+  language: z.string().optional()
+})
+
+export type ContactFormSchema = z.infer<typeof baseContactSchema>
 
 export const ContactList = () => {
   const contactsQuery = trpcClient.contacts.all.useQuery()
@@ -181,45 +145,122 @@ export const ContactList = () => {
   const [isImporting, setIsImporting] = useState(false)
   const [deleteInvoices, setDeleteInvoices] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [isLoadingAres, setIsLoadingAres] = useState(false)
+  const [location, navigate] = useLocation()
 
-  const schema = z.object({
-    registration_no: z.string().max(16).optional(), // 16 should be long enough for any registration number in the world
-    vat_no: z.string().optional(),
-    name: z.string().refine(
-      (name) => {
-        // make sure that the name is unique
-        return !contactsQuery.data?.find((contact) => {
-          return contact.name === name && contact.id !== contactId
-        })
-      },
-      {
-        message: 'Kontakt s tímto jménem již existuje'
-      }
-    ),
-    street: z.string().optional(),
-    street2: z.string().optional(),
-    city: z.string().optional(),
-    zip: z.string().optional(),
-    country: z.string().optional(),
-    main_email: z.string().email().nullish(),
-    phone_number: z.string().nullish()
-  })
+  // Memoize schema to prevent unnecessary re-computation
+  const schema = useMemo(
+    () =>
+      z.object({
+        registration_no: z.string().max(16).optional(),
+        vat_no: z.string().optional(),
+        name: z.string().refine(
+          (name) => {
+            return !contactsQuery.data?.find((contact) => {
+              return contact.name === name && contact.id !== contactId
+            })
+          },
+          {
+            message: 'Kontakt s tímto jménem již existuje'
+          }
+        ),
+        street: z.string().optional(),
+        street2: z.string().optional(),
+        city: z.string().optional(),
+        zip: z.string().optional(),
+        country: z.string().optional().default('Česká Republika'),
+        main_email: z.string().email().nullish(),
+        phone_number: z.string().nullish(),
+        language: z.string().optional()
+      }),
+    [contactsQuery.data, contactId]
+  )
 
-  const [values, setValues] = useState<z.infer<typeof schema>>({
+  const defaults = {
     name: '',
     street: '',
     street2: '',
     city: '',
     zip: '',
-    country: '',
-    main_email: null
+    country: 'Česká Republika',
+    main_email: null,
+    phone_number: null,
+    registration_no: '',
+    vat_no: '',
+    language: 'cs'
+  }
+  // Initialize forms with memoized resolvers
+  const editForm = useForm<ContactFormSchema>({
+    resolver: zodResolver(schema),
+    defaultValues: defaults
   })
-  const [location, navigate] = useLocation()
+
+  const newForm = useForm<ContactFormSchema>({
+    resolver: zodResolver(schema),
+    defaultValues: defaults
+  })
+
+  const handleAresDataFetched = (
+    aresData: z.infer<typeof AresBusinessInformationSchema>,
+    form: UseFormReturn<ContactFormSchema>
+  ) => {
+    form.setValue('name', aresData.obchodniJmeno)
+    form.setValue('street', formatStreetAddress(aresData))
+    form.setValue('street2', aresData.sidlo.nazevCastiObce)
+    form.setValue('city', aresData.sidlo.nazevObce)
+    form.setValue('zip', String(aresData.sidlo.psc))
+    form.setValue('vat_no', aresData.dic ?? '')
+    form.setValue('country', aresData.sidlo.nazevStatu)
+  }
+
+  const fetchAresData = async (form: UseFormReturn<ContactFormSchema>) => {
+    const registrationNo = form.getValues('registration_no')
+    if (!registrationNo || registrationNo.length !== 8) return
+
+    setIsLoadingAres(true)
+    try {
+      console.log('Fetching ARES data...', registrationNo)
+      const aresResponse = await fetch(
+        `https://ares.gov.cz/ekonomicke-subjekty-v-be/rest/ekonomicke-subjekty/${registrationNo}`
+      )
+      const parse = AresBusinessInformationSchema.safeParse(
+        await aresResponse.json()
+      )
+      console.log('parse', parse)
+      if (parse.success) {
+        const aresData = parse.data
+        console.log('aresData', aresData)
+        handleAresDataFetched(aresData, form)
+        toast.success('Údaje z ARESU byly úspěšně načteny')
+      } else {
+        console.error(parse.error)
+        toast.error('Nepodařilo se načíst údaje z ARESU')
+      }
+    } catch (error) {
+      console.error('ARES fetch error:', error)
+      toast.error('Chyba při načítání údajů z ARESU')
+    } finally {
+      setIsLoadingAres(false)
+    }
+  }
 
   useEffect(() => {
     // Only run this effect when contactId changes and we have data
     if (params.contactId && contactsQuery.data) {
       if (params.contactId === 'new') {
+        newForm.reset({
+          name: '',
+          street: '',
+          street2: '',
+          city: '',
+          zip: '',
+          country: 'Česká Republika',
+          main_email: null,
+          phone_number: null,
+          registration_no: '',
+          vat_no: '',
+          language: 'cs'
+        })
         setNewDialogOpen(true)
         setEditDialogOpen(false)
         return
@@ -230,7 +271,7 @@ export const ContactList = () => {
       )
 
       if (contact) {
-        setValues(contact as z.infer<typeof schema>)
+        editForm.reset(contact as z.infer<typeof schema>)
         setEditDialogOpen(true)
         setNewDialogOpen(false)
       } else {
@@ -242,7 +283,7 @@ export const ContactList = () => {
       setEditDialogOpen(false)
       setNewDialogOpen(false)
     }
-  }, [params.contactId, contactsQuery.data, navigate])
+  }, [params.contactId, contactsQuery.data, navigate, editForm, newForm])
 
   // Handle edit modal close
   const handleEditModalClose = (isOpen: boolean) => {
@@ -270,37 +311,6 @@ export const ContactList = () => {
     e.preventDefault()
     navigate(`/contacts/${contactId}`)
   }
-
-  useEffect(() => {
-    ;(async () => {
-      if (values.registration_no?.length === 8 && !values.name) {
-        // seems like a user is trying to add new contact, let's fetch data from ares
-        const aresResponse = await fetch(
-          `https://ares.gov.cz/ekonomicke-subjekty-v-be/rest/ekonomicke-subjekty/${values.registration_no}`
-        )
-        const parse = AresBusinessInformationSchema.safeParse(
-          await aresResponse.json()
-        )
-        console.log('parse', parse)
-        if (parse.success) {
-          const aresData = parse.data
-          console.log('aresData', aresData)
-          setValues({
-            ...values,
-            name: aresData.obchodniJmeno,
-            street: formatStreetAddress(aresData),
-            street2: aresData.sidlo.nazevCastiObce,
-            city: aresData.sidlo.nazevObce,
-            zip: String(aresData.sidlo.psc),
-            vat_no: aresData.dic,
-            country: aresData.sidlo.nazevStatu
-          })
-        } else {
-          console.error(parse.error)
-        }
-      }
-    })()
-  }, [values.registration_no])
 
   const csvFormatExample = `name,street,city,zip,country,registration_no,vat_no,email
 Company Ltd,123 Main St,Prague,10000,CZ,12345678,CZ12345678,contact@example.com`
@@ -379,7 +389,7 @@ Company Ltd,123 Main St,Prague,10000,CZ,12345678,CZ12345678,contact@example.com`
   }
 
   // Handle form submission for updating a contact
-  const handleUpdateSubmit = async (values: z.infer<typeof schema>) => {
+  const handleUpdateSubmit = async (values: ContactFormSchema) => {
     await update.mutateAsync({
       ...values,
       name: values.name as string,
@@ -392,12 +402,16 @@ Company Ltd,123 Main St,Prague,10000,CZ,12345678,CZ12345678,contact@example.com`
   }
 
   // Handle form submission for creating a new contact
-  const handleCreateSubmit = async (values: z.infer<typeof schema>) => {
+  const handleCreateSubmit = async (values: ContactFormSchema) => {
     await create.mutateAsync(values)
     contactsQuery.refetch()
     setNewDialogOpen(false)
     navigate('/contacts')
   }
+
+  // Wrapper functions for ARES fetching
+  const handleFetchAresEdit = () => fetchAresData(editForm)
+  const handleFetchAresNew = () => fetchAresData(newForm)
 
   // Handle contact deletion
   const handleDeleteContact = async () => {
@@ -421,14 +435,22 @@ Company Ltd,123 Main St,Prague,10000,CZ,12345678,CZ12345678,contact@example.com`
 
   // Handle opening the new contact dialog
   const handleAddClientClick = () => {
-    setValues({
+    // Ensure edit dialog is closed first
+    setEditDialogOpen(false)
+    setShowDeleteDialog(false)
+
+    newForm.reset({
       name: '',
       street: '',
       street2: '',
       city: '',
       zip: '',
       country: '',
-      main_email: null
+      main_email: null,
+      phone_number: null,
+      registration_no: '',
+      vat_no: '',
+      language: 'cs'
     })
     navigate('/contacts/new')
   }
@@ -481,122 +503,86 @@ Company Ltd,123 Main St,Prague,10000,CZ,12345678,CZ12345678,contact@example.com`
         </div>
       </div>
 
-      {/* Edit Contact Dialog - Always in DOM */}
-      <Dialog open={editDialogOpen} onOpenChange={handleEditModalClose}>
-        <DialogContent className="max-w-screen-lg overflow-y-auto max-h-screen">
-          <DialogHeader>
-            <DialogTitle>Editace kontaktu</DialogTitle>
-          </DialogHeader>
+      {/* Edit Contact Dialog - Conditionally rendered */}
+      {editDialogOpen && (
+        <Dialog open={editDialogOpen} onOpenChange={handleEditModalClose}>
+          <DialogContent className="max-w-screen-lg overflow-y-auto max-h-screen">
+            <DialogHeader>
+              <DialogTitle>Editace kontaktu</DialogTitle>
+            </DialogHeader>
 
-          <AutoForm
-            containerClassName="grid grid-cols-2 gap-4"
-            formSchema={schema}
-            values={values}
-            onParsedValuesChange={(values) => {
-              setValues(values)
-            }}
-            onValuesChange={(values) => {
-              setValues(values)
-            }}
-            onSubmit={handleUpdateSubmit}
-            // @ts-expect-error
-            fieldConfig={fieldConfigForContactForm}
-          >
-            <DialogFooter className="flex justify-between">
-              <div className="w-full flex justify-between">
-                <div className="flex flex-col items-start gap-2">
-                  {hasInvoices && (
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="delete-invoices"
-                        checked={deleteInvoices}
-                        onCheckedChange={(checked) =>
-                          setDeleteInvoices(checked === true)
-                        }
-                      />
-                      <label
-                        htmlFor="delete-invoices"
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                      >
-                        Smazat všechny faktury kontaktu ({invoiceCount})
-                      </label>
-                    </div>
-                  )}
-                  <Button
-                    className="align-left self-start justify-self-start"
-                    variant={'destructive'}
-                    onClick={handleShowDeleteDialog}
-                    disabled={hasInvoices && !deleteInvoices}
-                  >
-                    Smazat
-                  </Button>
-                </div>
-                <Button type="submit">Uložit</Button>
-              </div>
+            <ContactForm
+              form={editForm}
+              onSubmit={handleUpdateSubmit}
+              isEdit={true}
+              hasInvoices={hasInvoices}
+              invoiceCount={invoiceCount}
+              deleteInvoices={deleteInvoices}
+              setDeleteInvoices={setDeleteInvoices}
+              handleShowDeleteDialog={handleShowDeleteDialog}
+              isLoadingAres={isLoadingAres}
+              onFetchAres={handleFetchAresEdit}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Delete Dialog - Conditionally rendered */}
+      {showDeleteDialog && (
+        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>
+                Opravdu chcete smazat kontakt{' '}
+                <strong>{editForm.getValues('name')}</strong>?
+              </DialogTitle>
+              {hasInvoices && deleteInvoices && (
+                <DialogDescription className="pt-2 text-red-500">
+                  Budou smazány také všechny faktury ({invoiceCount}) spojené s
+                  tímto kontaktem!
+                </DialogDescription>
+              )}
+            </DialogHeader>
+
+            <DialogFooter className="gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowDeleteDialog(false)}
+              >
+                Zrušit
+              </Button>
+
+              <Button
+                className="flex items-center gap-2"
+                variant="destructive"
+                onClick={handleDeleteContact}
+              >
+                {deleteWithInvoices.isPending && <Spinner />}
+                Smazat
+              </Button>
             </DialogFooter>
-          </AutoForm>
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
+      )}
 
-      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>
-              Opravdu chcete smazat kontakt <strong>{values.name}</strong>?
-            </DialogTitle>
-            {hasInvoices && deleteInvoices && (
-              <DialogDescription className="pt-2 text-red-500">
-                Budou smazány také všechny faktury ({invoiceCount}) spojené s
-                tímto kontaktem!
-              </DialogDescription>
-            )}
-          </DialogHeader>
+      {/* New Contact Dialog - Conditionally rendered */}
+      {newDialogOpen && (
+        <Dialog open={newDialogOpen} onOpenChange={handleNewModalClose}>
+          <DialogContent className="max-w-screen-lg overflow-y-auto max-h-screen">
+            <DialogHeader>
+              <DialogTitle>Nový kontakt</DialogTitle>
+            </DialogHeader>
 
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowDeleteDialog(false)}
-            >
-              Zrušit
-            </Button>
-
-            <Button
-              className="flex items-center gap-2"
-              variant="destructive"
-              onClick={handleDeleteContact}
-            >
-              {deleteWithInvoices.isPending && <Spinner />}
-              Smazat
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* New Contact Dialog - Always in DOM */}
-      <Dialog open={newDialogOpen} onOpenChange={handleNewModalClose}>
-        <DialogContent className="max-w-screen-lg overflow-y-auto max-h-screen">
-          <DialogHeader>
-            <DialogTitle>Nový kontakt</DialogTitle>
-          </DialogHeader>
-
-          <AutoForm
-            formSchema={schema}
-            values={values}
-            onParsedValuesChange={setValues}
-            onValuesChange={(values) => {
-              setValues(values)
-            }}
-            containerClassName="grid grid-cols-2 gap-4"
-            onSubmit={handleCreateSubmit}
-            // @ts-expect-error
-            fieldConfig={fieldConfigForContactForm}
-          >
-            <DialogFooter>
-              <Button type="submit">Přidat kontakt</Button>
-            </DialogFooter>
-          </AutoForm>
-        </DialogContent>
-      </Dialog>
+            <ContactForm
+              form={newForm}
+              onSubmit={handleCreateSubmit}
+              isEdit={false}
+              isLoadingAres={isLoadingAres}
+              onFetchAres={handleFetchAresNew}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
 
       <SpinnerContainer loading={contactsQuery.isLoading}>
         <Table>

@@ -8,8 +8,8 @@ import { Button, ButtonWithLoader } from '@/components/ui/button'
 import { getInvoiceCreateSchema } from 'faktorio-api/src/routers/zodSchemas'
 import { djs } from 'faktorio-shared/src/djs'
 import { useZodFormState } from '@/lib/useZodFormState'
-import { z } from 'zod'
-import { invoiceItemFormSchema } from '../../../../faktorio-api/src/zodDbSchemas'
+import { z } from 'zod/v4'
+import { invoiceItemFormSchema } from 'faktorio-api/src/zodDbSchemas'
 import { useEffect, useState } from 'react'
 import { Center } from '../../components/Center'
 import { useLocation } from 'wouter'
@@ -24,6 +24,7 @@ import { FormControl } from '@/components/ui/form'
 import { FormItem } from '@/components/ui/form'
 import { FormLabel } from '@/components/ui/form'
 import { BankDetailsAccordion } from './BankDetailsAccordion'
+import { createDateFieldConfig } from './dateFieldConfig'
 
 export const EditInvoicePage = () => {
   const [invoice] = useInvoiceQueryByUrlParam()
@@ -107,20 +108,16 @@ export const EditInvoicePage = () => {
           currency: {
             label: 'Měna'
           },
-          issued_on: {
-            label: 'Datum vystavení faktury',
-            fieldType: 'date'
-          },
+          issued_on: createDateFieldConfig('Datum vystavení faktury'),
           number: {
             label: 'Číslo faktury'
           },
           payment_method: {
             label: 'Způsob platby'
           },
-          taxable_fulfillment_due: {
-            label: 'Datum zdanitelného plnění',
-            fieldType: 'date'
-          },
+          taxable_fulfillment_due: createDateFieldConfig(
+            'Datum zdanitelného plnění'
+          ),
           footer_note: {
             label: 'Poznámka'
           },

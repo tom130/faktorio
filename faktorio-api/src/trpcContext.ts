@@ -1,21 +1,27 @@
 import { initTRPC } from '@trpc/server'
 import { LibSQLDatabase } from 'drizzle-orm/libsql'
-import * as schema from './schema'
+import * as schema from 'faktorio-db/schema'
 import superjson from 'superjson'
 import { GoogleAIFileManager } from '@google/generative-ai/server'
 
-import { userT } from './schema'
+import { UserSelectType } from 'faktorio-db/schema'
 import { Env } from './envSchema'
 import { GoogleGenAI } from '@google/genai'
 
 // JWT secret should be the same as in authRouter
 
 export type TrpcContext = {
+  // db: LibSQLDatabase<typeof schema> | SQLJsDatabase<typeof schema> // ideally this, but drizzle types go haywire when we define db like this
   db: LibSQLDatabase<typeof schema>
   env: Env
-  user: typeof userT.$inferSelect | undefined
+  user: UserSelectType | undefined
   req: Request
-  generateToken: (user: typeof userT.$inferSelect) => Promise<string>
+  generateToken: (user: UserSelectType) => Promise<string>
+  sendEmail: (email: {
+    to: { email: string; name: string }
+    subject: string
+    html: string
+  }) => Promise<void>
   googleGenAIFileManager: GoogleAIFileManager
   googleGenAI: GoogleGenAI
 }

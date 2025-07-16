@@ -14,9 +14,8 @@ import { formatMoneyCzech } from '../../lib/formatMoney'
 import {
   InsertInvoiceItemType,
   SelectInvoiceType
-} from '../../../../faktorio-api/src/zodDbSchemas'
-import { useQRCodeBase64 } from '@/lib/useQRCodeBase64'
-import { generateQrPaymentString } from '@/lib/qrCodeGenerator'
+} from 'faktorio-api/src/zodDbSchemas'
+
 import { reactMainRender } from '@/main'
 
 Font.register({
@@ -186,9 +185,11 @@ const ItemDescText = ({
 }
 
 export const CzechInvoicePDF = ({
-  invoiceData
+  invoiceData,
+  qrCodeBase64
 }: {
   invoiceData: SelectInvoiceType & { items: InsertInvoiceItemType[] }
+  qrCodeBase64: string
 }) => {
   const taxPaidByRate: Record<number, number> = invoiceData.items.reduce(
     (acc, item) => {
@@ -197,11 +198,10 @@ export const CzechInvoicePDF = ({
       const tax = total * (vat / 100)
       return {
         ...acc,
-        // @ts-expect-error
         [vat]: ((acc[vat] ?? 0) as number) + tax
       }
     },
-    {}
+    {} as Record<number, number>
   )
 
   const taxTotal = Object.values(taxPaidByRate).reduce(
@@ -212,20 +212,6 @@ export const CzechInvoicePDF = ({
     (acc, item) => acc + (item.quantity ?? 0) * (item.unit_price ?? 0),
     0
   )
-
-  const qrCodeBase64 = useQRCodeBase64(
-    generateQrPaymentString({
-      accountNumber: invoiceData.iban?.replace(/\s/g, '') ?? '',
-      amount: invoiceTotal + taxTotal,
-      currency: invoiceData.currency,
-      variableSymbol: invoiceData.number.replace('-', ''),
-      message: 'Faktura ' + invoiceData.number
-    })
-  )
-
-  if (!qrCodeBase64) {
-    return null
-  }
 
   return (
     <Document key={new Date().toISOString()}>
@@ -269,15 +255,14 @@ export const CzechInvoicePDF = ({
                   >
                     QR platba:
                   </Text>
-                  {qrCodeBase64 && (
-                    <Image
-                      style={{
-                        width: 100,
-                        height: 100
-                      }}
-                      source={qrCodeBase64}
-                    ></Image>
-                  )}
+
+                  <Image
+                    style={{
+                      width: 100,
+                      height: 100
+                    }}
+                    source={qrCodeBase64}
+                  ></Image>
                 </View>
               </View>
               <Flex
@@ -325,14 +310,16 @@ export const CzechInvoicePDF = ({
               <SectionHeading>Dodavatel</SectionHeading>
 
               <View style={styles.section}>
-                <Text
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 500
-                  }}
-                >
-                  {invoiceData.your_name}
-                </Text>
+                <View style={{ maxWidth: '95%' }}>
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 500
+                    }}
+                  >
+                    {invoiceData.your_name}
+                  </Text>
+                </View>
                 <Text>{invoiceData.your_street}</Text>
                 <Text>
                   {invoiceData.your_zip} {invoiceData.your_city}

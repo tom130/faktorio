@@ -1,13 +1,24 @@
 import { Button } from '@/components/ui/button'
 import { Link } from 'wouter'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { LucidePiggyBank, LucideTwitter } from 'lucide-react'
+import {
+  LucidePiggyBank,
+  LucideTwitter,
+  Users,
+  FileText,
+  LucideGithub
+} from 'lucide-react'
 import { MountainIcon } from '@/components/MountainIcon'
-import { Footer, PageShell } from './PageShell'
+import { Footer } from './PageShell'
 import { ButtonLink } from '@/components/ui/link'
 import { Separator } from '@/components/ui/separator'
+import { trpcClient } from '@/lib/trpcClient'
 
 export const LandingPage = () => {
+  const { data: systemStats } = trpcClient.systemStats.useQuery(undefined, {
+    staleTime: 24 * 60 * 60 * 1000 // 24 hours
+  })
+
   return (
     <>
       <div>
@@ -21,9 +32,15 @@ export const LandingPage = () => {
                 Nejsnadnější způsob, jak vytvářet faktury.
               </p>
             </div>
+
             <div className="mx-auto max-w-[400px] space-y-2">
               <Link href="/signup">
-                <Button className="w-full" type="submit">
+                <Button
+                  className="w-full"
+                  type="submit"
+                  role="link"
+                  aria-label="Registrace"
+                >
                   Registrace
                 </Button>
               </Link>
@@ -55,6 +72,36 @@ export const LandingPage = () => {
               src="/faktura.png"
             />
             <div className="flex flex-col gap-2 min-[400px]:flex-col">
+              <Card>
+                <CardContent>
+                  {systemStats && (
+                    <div className="grid grid-cols-2 gap-8 py-8 px-4">
+                      <div className="flex flex-col items-center gap-3">
+                        <Users className="h-12 w-12 text-blue-500" />
+                        <div className="text-center">
+                          <div className="text-3xl font-bold">
+                            {Math.ceil(systemStats.user_count / 10) * 10}+
+                          </div>
+                          <div className="text-lg text-muted-foreground">
+                            uživatelů vystavuje zdarma
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-center gap-3">
+                        <FileText className="h-12 w-12 text-green-500" />
+                        <div className="text-center">
+                          <div className="text-3xl font-bold">
+                            {Math.ceil(systemStats.invoice_count / 10) * 10}+
+                          </div>
+                          <div className="text-lg text-muted-foreground">
+                            vystavených faktur
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
               <Card>
                 <CardHeader>
                   <CardTitle className="flex flex-row gap-4">
@@ -115,17 +162,23 @@ export const LandingPage = () => {
                 <CardContent>
                   <div className="flex flex-col items-center">
                     <p>
-                      Faktorio je open-source a rád uvítám další maintainery.
-                      Pokud by někdy faktorio mělo mít byť jen nepatrný zisk,
-                      bude zisk rozdělen mezi všechny přispěvatele podle
-                      velikosti jejich příspěvku. Zajímá-li jak by se velikost
-                      vašeho příspevku počítala, podívejte se na{' '}
+                      Faktorio je open-source a rád uvítám jakékoliv příspěvky
+                      do codebase. Pokud by někdy faktorio mělo mít byť jen
+                      nepatrný zisk, bude zisk rozdělen mezi všechny
+                      přispěvatele podle velikosti jejich příspěvku. Zajímá-li
+                      jak by se velikost vašeho příspevku počítala, podívejte se
+                      na{' '}
                       <a href="https://github.com/capaj/contrib-locs">
                         <Button variant={'link'}>projekt contrib-locs</Button>
                       </a>
                     </p>
 
-                    <p>
+                    <div className="flex flex-row gap-2 items-center">
+                      <a href="https://github.com/capaj/faktorio">
+                        <Button variant={'outline'}>
+                          <LucideGithub></LucideGithub> Faktorio na GH
+                        </Button>
+                      </a>
                       Autor:
                       <a
                         href="https://twitter.com/capajj"
@@ -135,26 +188,10 @@ export const LandingPage = () => {
                           <LucideTwitter></LucideTwitter> @capajj
                         </Button>
                       </a>
-                    </p>
+                    </div>
                   </div>
-                  <p>
-                    Tech stack projektu je:
-                    <ul className="ml-4">
-                      <li>Typescript</li>
-                      <li>React.js</li>
-                      <li>Drizzle ORM</li>
-                      <li>TRPC</li>
-                      <li>Turso</li>
-                      <li>Shadcn</li>
-                      <li>Cloudflare workers</li>
-                    </ul>
-                  </p>
-                  <p className="mt-3">
-                    Jste programátor a chcete se podílet na vývoji, neváhejte{' '}
-                    <a href="https://github.com/capaj/faktorio">
-                      forknout na GH
-                    </a>
-                  </p>
+
+                  <div className="mt-3"></div>
                 </CardContent>
               </Card>
             </div>

@@ -29,7 +29,7 @@ import { InvoicesDownloadButton } from '@/pages/InvoiceList/InvoicesDownloadButt
 
 // Define the shape of an invoice - adjust based on your actual data structure
 // This might need refinement based on the exact structure from your tRPC query
-import { invoicesTb } from '../../../faktorio-api/src/schema'
+import { invoicesTb } from 'faktorio-db/schema'
 import { InferSelectModel } from 'drizzle-orm'
 
 export type Invoice = Pick<
@@ -79,6 +79,25 @@ export function IssuedInvoiceTable({
   year,
   search
 }: InvoiceTableProps) {
+  // Determine if we should show full year in dates
+  const showFullYear = year === null || year === undefined
+
+  // Helper function to format dates in Czech format
+  function formatCzechDate(dateString: string | null): string {
+    if (!dateString) return ''
+
+    const date = new Date(dateString)
+    const day = date.getDate()
+    const month = date.getMonth() + 1
+    const year = date.getFullYear()
+
+    if (showFullYear) {
+      return `${day}.${month}.${year}`
+    } else {
+      return `${day}.${month}.`
+    }
+  }
+
   const currencyTotals = invoices.reduce<CurrencyTotals>((acc, invoice) => {
     const currency = invoice.currency || 'N/A' // Handle potential null/undefined currency
     if (!acc[currency]) {
@@ -132,9 +151,11 @@ export function IssuedInvoiceTable({
               </Link>
             </TableCell>
             <TableCell>{invoice.client_name}</TableCell>
-            <TableCell>{invoice.taxable_fulfillment_due}</TableCell>
-            <TableCell>{invoice.issued_on}</TableCell>
-            <TableCell>{invoice.sent_at}</TableCell>
+            <TableCell>
+              {formatCzechDate(invoice.taxable_fulfillment_due)}
+            </TableCell>
+            <TableCell>{formatCzechDate(invoice.issued_on)}</TableCell>
+            <TableCell>{formatCzechDate(invoice.sent_at)}</TableCell>
             <TableCell>
               <span
                 className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -143,7 +164,9 @@ export function IssuedInvoiceTable({
                     : 'bg-yellow-100 text-yellow-800'
                 }`}
               >
-                {invoice.paid_on ? invoice.paid_on : 'Nezaplaceno'}
+                {invoice.paid_on
+                  ? formatCzechDate(invoice.paid_on)
+                  : 'Nezaplaceno'}
               </span>
             </TableCell>
             <TableCell>
@@ -260,11 +283,11 @@ export function IssuedInvoiceTable({
                   v {currency}
                 </TableCell>
                 <TableCell></TableCell> {/* Empty cell for alignment */}
-                <TableCell>
+                <TableCell className="whitespace-nowrap">
                   {formatNumberWithSpaces(currencyTotals[currency].subtotal)}{' '}
                   {currency}
                 </TableCell>
-                <TableCell>
+                <TableCell className="whitespace-nowrap">
                   {formatNumberWithSpaces(currencyTotals[currency].total)}{' '}
                   {currency}
                 </TableCell>
@@ -287,7 +310,7 @@ export function IssuedInvoiceTable({
                       : 'faktur'}
                 </TableCell>
                 {/* Display the total sum in CZK */}
-                <TableCell colSpan={1} className="text-left">
+                <TableCell colSpan={1} className="text-left whitespace-nowrap">
                   {formatNumberWithSpaces(totalSumCZK)} CZK
                 </TableCell>
                 <TableCell className="text-right">

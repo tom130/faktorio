@@ -4,6 +4,9 @@ import { ButtonProps, buttonVariants } from './ui/button'
 import { cn } from '@/lib/utils'
 import { Spinner } from './ui/spinner'
 
+/**
+ * faktorio button component
+ */
 export const FkButton = React.forwardRef<
   HTMLButtonElement,
   ButtonProps & { isLoading?: boolean }
@@ -14,6 +17,7 @@ export const FkButton = React.forwardRef<
       className={cn(buttonVariants({ variant, size, className }))}
       ref={ref}
       {...props}
+      type={props.type || 'button'}
       disabled={props.disabled || props.isLoading}
     >
       <div className="relative">
